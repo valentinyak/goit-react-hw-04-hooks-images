@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import Loader from 'react-loader-spinner';
 
@@ -12,111 +12,91 @@ import s from './App.module.css';
 import 'react-toastify/dist/ReactToastify.css';
 import 'react-loader-spinner/dist/loader/css/react-spinner-loader.css';
 
-export default class App extends Component {
-  state = {
-    serchQuery: '',
-    currentPage: 1,
-    images: [],
-    error: null,
-    status: 'idle',
-    showModal: false,
-    openedImg: null,
-    totalImages: 0,
-  };
+export default function App() {
+  const [serchQuery, setSerchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [images, setImages] = useState([]);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState('idle');
+  const [showModal, setShowModal] = useState(false);
+  const [openedImg, setOpenedImg] = useState(null);
+  const [totalImages, setTotalImages] = useState(0);
 
-  componentDidUpdate(prevProps, prevState) {
-    const { serchQuery, images, status } = this.state;
-
-    if (serchQuery !== prevState.serchQuery) {
-      this.setState({ currentPage: 1, images: [], status: 'pending' });
-      setTimeout(() => {
-        this.makeFetch();
-      });
+  useEffect(() => {
+    if (serchQuery !== '' && status === 'idle') {
+      setStatus('pending');
+      makeFetch();
     }
 
     if (images.length === 0 && status === 'resolved') {
-      toast.info('По вашему запросу ничего не найдено');
-      this.setState({ status: 'idle' });
+      toast.info(`По запросу '${serchQuery}' ничего не найдено`);
     }
-  }
+  }, [images.length, status, serchQuery]);
 
-  handleFormSubmit = serchQuery => {
-    this.setState({ serchQuery });
+  const handleFormSubmit = serchQuery => {
+    setSerchQuery(serchQuery);
+    setStatus('idle');
+    setImages([]);
+    setCurrentPage(1);
+    setTotalImages(0);
   };
 
-  handleBtnClick = () => {
-    this.setState({ status: 'pending' });
-    this.makeFetch();
-
-    window.scrollTo({
-      top: document.documentElement.scrollHeight,
-      behavior: 'smooth',
-    });
+  const handleBtnClick = () => {
+    setStatus('pending');
+    makeFetch();
   };
 
-  handleImgClick = e => {
+  const handleImgClick = e => {
     const largeImg = e.currentTarget.alt;
 
-    this.setState(state => {
-      return { showModal: !state.showModal, openedImg: largeImg };
-    });
+    setShowModal(showModal => !showModal);
+    setOpenedImg(largeImg);
   };
 
-  handleOverleyClick = e => {
-    if (e.target.nodeName === 'IMG') {
-      return;
+  const handleOverleyClick = e => {
+    if (e.target.nodeName !== 'IMG') {
+      setShowModal(showModal => !showModal);
     }
-    this.setState(state => {
-      return { showModal: !state.showModal };
-    });
   };
 
-  makeFetch() {
+  const makeFetch = () => {
     pixabayAPI
-      .fetchImages(this.state.serchQuery, this.state.currentPage)
+      .fetchImages(serchQuery, currentPage)
       .then(parsedResponse => {
-        this.setState(state => {
-          return {
-            images: [...state.images, ...parsedResponse.hits],
-            currentPage: state.currentPage + 1,
-            status: 'resolved',
-            totalImages: parsedResponse.total,
-          };
+        setImages([...images, ...parsedResponse.hits]);
+        setCurrentPage(currentPage + 1);
+        setTotalImages(parsedResponse.total);
+      })
+      .then(() => {
+        setStatus('resolved');
+        window.scrollTo({
+          top: document.documentElement.scrollHeight,
+          behavior: 'smooth',
         });
       })
-      .catch(error => this.setState({ error, status: 'rejected' }));
-  }
+      .catch(error => {
+        setError(error);
+        setStatus('rejected');
+      });
+  };
 
-  render() {
-    const {
-      handleFormSubmit,
-      state,
-      handleImgClick,
-      handleBtnClick,
-      handleOverleyClick,
-    } = this;
-    const { images, status, totalImages, error, showModal, openedImg } = state;
+  return (
+    <div className={s.App}>
+      <ToastContainer autoClose={3000} />
+      <Searchbar onSubmit={handleFormSubmit} />
+      <ImageGallery images={images} onClick={handleImgClick} />
 
-    return (
-      <div className={s.App}>
-        <ToastContainer autoClose={3000} />
-        <Searchbar onSubmit={handleFormSubmit} />
-        <ImageGallery images={images} onClick={handleImgClick} />
+      {status === 'pending' && (
+        <Loader type="ThreeDots" color="#00BFFF" height={100} width={100} />
+      )}
 
-        {status === 'pending' && (
-          <Loader type="ThreeDots" color="#00BFFF" height={100} width={100} />
-        )}
+      {images.length > 0 && images.length < totalImages && (
+        <Button onClick={handleBtnClick} />
+      )}
 
-        {images.length > 0 && images.length < totalImages && (
-          <Button onClick={handleBtnClick} />
-        )}
+      {status === 'rejected' && <div>{error}</div>}
 
-        {status === 'rejected' && <div>{error}</div>}
-
-        {showModal && (
-          <Modal largeImg={openedImg} onClick={handleOverleyClick} />
-        )}
-      </div>
-    );
-  }
+      {showModal && <Modal largeImg={openedImg} onClick={handleOverleyClick} />}
+    </div>
+  );
 }
